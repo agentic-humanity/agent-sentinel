@@ -7,14 +7,13 @@ export type SSEClient = {
 
 /**
  * In-memory store that aggregates agents from all providers.
- * Notifies SSE clients on every change.
+ * Only broadcasts SSE when data actually changes (diffed by JSON hash).
  */
 export class Store {
-  /** All agents keyed by agent.id */
   private agents = new Map<string, Agent>()
-  /** Connected SSE clients */
   private clients = new Map<string, SSEClient>()
   private clientSeq = 0
+  private lastHash = ''
 
   /** Replace all agents from a specific provider */
   updateFromProvider(providerName: string, agents: Agent[]): void {
@@ -24,23 +23,30 @@ export class Store {
         this.agents.delete(id)
       }
     }
-    // Add fresh agents
     for (const agent of agents) {
       this.agents.set(agent.id, agent)
     }
-    this.broadcast()
+
+    // Only broadcast if data actually changed
+    const snapshot = this.getAll()
+    const hash = JSON.stringify(snapshot)
+    if (hash !== this.lastHash) {
+      this.lastHash = hash
+      this.broadcastSnapshot(snapshot)
+    }
   }
 
   /** Upsert a single agent (used by browser provider) */
   upsertAgent(agent: Agent): void {
     this.agents.set(agent.id, agent)
-    this.broadcast()
+    this.broadcastChanged()
   }
 
   /** Remove an agent by id */
   removeAgent(id: string): void {
     if (this.agents.delete(id)) {
       this.broadcastEvent('agent_remove', { id })
+      this.lastHash = ''
     }
   }
 
@@ -67,8 +73,16 @@ export class Store {
     }
   }
 
-  private broadcast(): void {
-    const data = this.getAll()
+  private broadcastChanged(): void {
+    const snapshot = this.getAll()
+    const hash = JSON.stringify(snapshot)
+    if (hash !== this.lastHash) {
+      this.lastHash = hash
+      this.broadcastSnapshot(snapshot)
+    }
+  }
+
+  private broadcastSnapshot(data: Agent[]): void {
     for (const client of this.clients.values()) {
       this.sendTo(client.controller, 'snapshot', data)
     }

@@ -46,28 +46,16 @@ export function useAgents() {
     eventSource.onerror = () => {
       connected.value = false
       eventSource?.close()
+      // Reconnect after 3s on error only
       reconnectTimer = setTimeout(connect, 3000)
     }
   }
 
-  // Reconnect every 15s to guarantee fresh data
-  let refreshTimer: ReturnType<typeof setInterval> | null = null
-
-  onMounted(() => {
-    connect()
-    refreshTimer = setInterval(() => {
-      // Force reconnect SSE to get fresh snapshot
-      if (eventSource) {
-        eventSource.close()
-      }
-      connect()
-    }, 15_000)
-  })
+  onMounted(connect)
 
   onUnmounted(() => {
     eventSource?.close()
     if (reconnectTimer) clearTimeout(reconnectTimer)
-    if (refreshTimer) clearInterval(refreshTimer)
   })
 
   return { agents, connected }

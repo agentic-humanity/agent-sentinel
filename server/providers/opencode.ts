@@ -1,5 +1,5 @@
 import { Database } from 'bun:sqlite'
-import { existsSync } from 'fs'
+import { existsSync, watch, type FSWatcher } from 'fs'
 import { join } from 'path'
 import { homedir } from 'os'
 import type { Agent, AgentStatus, EmitFn, Provider } from './types'
@@ -32,7 +32,11 @@ interface MessageRow {
   provider: string | null
 }
 
+/** Fallback poll interval when fs.watch is unavailable */
 const POLL_INTERVAL = 5_000
+
+/** Debounce interval for fs.watch events (avoid hammering on rapid writes) */
+const WATCH_DEBOUNCE = 500
 
 /** How long a session stays visible after last update (30 min) */
 const VISIBILITY_WINDOW = 30 * 60 * 1000
@@ -116,6 +120,8 @@ function describeAction(tool: string | null, _status: string | null, desc: strin
 export class OpenCodeProvider implements Provider {
   readonly name = 'opencode'
   private timer: ReturnType<typeof setInterval> | null = null
+  private watcher: FSWatcher | null = null
+  private watchDebounce: ReturnType<typeof setTimeout> | null = null
   private db: Database | null = null
   private dbPath: string
   private registry = new ModelRegistry()
@@ -125,9 +131,14 @@ export class OpenCodeProvider implements Provider {
   }
 
   start(emit: EmitFn): void {
-    // Load model registry in background, don't block polling
+    // Load model registry in background, then poll once
     this.registry.load().then(() => this.poll(emit))
     this.poll(emit)
+
+    // Primary: watch WAL file for changes (near-instant)
+    this.startWatcher(emit)
+
+    // Fallback: poll every 5s in case fs.watch misses events
     this.timer = setInterval(() => this.poll(emit), POLL_INTERVAL)
   }
 
@@ -136,9 +147,36 @@ export class OpenCodeProvider implements Provider {
       clearInterval(this.timer)
       this.timer = null
     }
+    if (this.watchDebounce) {
+      clearTimeout(this.watchDebounce)
+      this.watchDebounce = null
+    }
+    if (this.watcher) {
+      this.watcher.close()
+      this.watcher = null
+    }
     if (this.db) {
       this.db.close()
       this.db = null
+    }
+  }
+
+  /** Watch the SQLite WAL file for changes — triggers poll within 500ms of any DB write */
+  private startWatcher(emit: EmitFn): void {
+    const walPath = this.dbPath + '-wal'
+    if (!existsSync(walPath)) {
+      console.log('[opencode] WAL file not found, relying on poll only')
+      return
+    }
+    try {
+      this.watcher = watch(walPath, () => {
+        // Debounce: OpenCode writes multiple times per action
+        if (this.watchDebounce) clearTimeout(this.watchDebounce)
+        this.watchDebounce = setTimeout(() => this.poll(emit), WATCH_DEBOUNCE)
+      })
+      console.log('[opencode] Watching WAL file for real-time updates')
+    } catch (e) {
+      console.warn('[opencode] fs.watch failed, relying on poll only:', e)
     }
   }
 
