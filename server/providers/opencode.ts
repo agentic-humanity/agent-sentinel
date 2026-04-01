@@ -48,11 +48,13 @@ const PROVIDER_LABELS: Record<string, string> = {
   zai: 'Zai',
 }
 
-/** Human-friendly model names */
+/** Human-friendly model names.
+ *  Convention: keep exact version numbers — e.g. "claude-opus-4-6" → "Claude Opus 4.6"
+ */
 function formatModel(modelId: string): string {
   const map: Record<string, string> = {
-    'claude-opus-4-6': 'Claude Opus 4',
-    'claude-sonnet-4-6': 'Claude Sonnet 4',
+    'claude-opus-4-6': 'Claude Opus 4.6',
+    'claude-sonnet-4-6': 'Claude Sonnet 4.6',
     'claude-3-5-sonnet': 'Claude Sonnet 3.5',
     'claude-3-5-haiku': 'Claude Haiku 3.5',
     'gpt-5.4': 'GPT-5.4',
