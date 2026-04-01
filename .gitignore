@@ -1,0 +1,12 @@
+node_modules/
+dist/
+web/dist/
+.vite/
+*.log
+.DS_Store
+bun.lock
+*.tsbuildinfo
+.env
+.env.*
+_q.ts
+_query.ts

@@ -1,0 +1,129 @@
+# Agent Sentinel
+
+统一监控多个 AI 工具的实时状态面板。
+
+同时使用 OpenCode、Cursor、Kimi、DeepSeek、Gemini 等工具时，一个页面看清所有 Agent 当前在做什么、做完了没有、是否需要你操作。
+
+## 功能
+
+- **实时状态监控**：Active / Idle / Needs Attention 三态，颜色渐变切换
+- **OpenCode 深度集成**：读取本地 SQLite 数据库，检测所有活跃 Session
+- **任务步骤追踪**：2 行步骤展示（当前 + 上一个），完成的任务自动打勾下移
+- **模型 & Provider 显示**：完整模型名（Claude Opus 4 等）+ API 提供商
+- **用户指令 / Agent 回复**：可选展示最后一条用户输入和 Agent 文字回复
+- **Sub-agent 管理**：idle 的子代理自动移除，可切换是否显示
+- **SSE 实时推送**：前端通过 Server-Sent Events 获取更新，秒级响应
+- **REST API**：所有数据通过 API 暴露，可供其他系统集成
+- **可扩展 Provider 架构**：实现 `Provider` 接口即可接入新数据源
+
+## 技术栈
+
+| 层 | 技术 |
+|---|------|
+| Runtime | Bun |
+| Server | Hono |
+| Frontend | Vue 3 + Vite + Tailwind CSS v4 |
+| DB 读取 | bun:sqlite（读取 OpenCode 数据库）|
+
+## 快速开始
+
+```bash
+# 安装依赖
+bun install
+
+# 启动 API Server（端口 8777）
+bun run dev &
+
+# 启动 Vue Dashboard（端口 5188，代理 API 到 8777）
+bun run dev:web
+
+# 打开浏览器
+# http://localhost:5188
+```
+
+## API
+
+```
+GET  /api/agents          # 所有 Agent 当前状态
+GET  /api/agents/:id      # 单个 Agent 详情
+GET  /api/events          # SSE 实时事件流
+POST /api/agents/report   # 浏览器扩展上报端点
+GET  /api/providers       # 已注册 Provider 列表
+GET  /api/health          # 健康检查
+```
+
+## 项目结构
+
+```
+server/
+  index.ts              # Bun + Hono 入口
+  api.ts                # REST + SSE 路由
+  store.ts              # 内存状态聚合
+  providers/
+    types.ts            # Provider 接口定义
+    opencode.ts         # OpenCode Provider（读 SQLite）
+    browser.ts          # Browser Provider（接收扩展 POST）
+web/
+  src/
+    App.vue             # 主页面 + Settings Popover
+    components/
+      AgentCard.vue     # Agent 状态卡片
+    composables/
+      useAgents.ts      # SSE 订阅
+      useNow.ts         # 实时时钟（秒级 tick）
+extension/              # 浏览器扩展（开发中）
+```
+
+## 扩展 Provider
+
+实现 `Provider` 接口，注册到 `server/index.ts` 即可：
+
+```ts
+interface Provider {
+  readonly name: string
+  start(emit: (agents: Agent[]) => void): void
+  stop(): void
+}
+```
+
+## Display 开关
+
+右上角 Settings 面板支持 6 个显示开关：
+
+| 开关 | 说明 | 默认 |
+|------|------|------|
+| Model | 显示模型名称 | ON |
+| Provider | 显示 API 提供商 | OFF |
+| Folder | 显示项目文件夹 | OFF |
+| User Input | 显示用户最后一条指令 | OFF |
+| Reply | 显示 Agent 最后一段回复 | OFF |
+| Sub-agents | 显示活跃子代理 | OFF |
+
+## Roadmap
+
+### Phase 1 — CLI Agent（当前）
+- [x] OpenCode Provider（SQLite 轮询）
+- [ ] Claude Code Provider
+- [ ] Codex CLI Provider
+
+### Phase 2 — Code Agent（IDE 集成）
+- [ ] Cursor Provider（hook / 状态文件）
+- [ ] Trae Provider
+- [ ] Windsurf Provider
+
+### Phase 3 — 网页对话
+- [ ] Edge / Chrome 浏览器扩展
+- [ ] Kimi 页面状态检测
+- [ ] DeepSeek 页面状态检测
+- [ ] 豆包页面状态检测
+- [ ] Gemini 页面状态检测
+- [ ] ChatGPT / Claude.ai 页面状态检测
+
+### Phase 4 — 平台集成
+- [ ] 桌面通知（任务完成 / 需要操作）
+- [ ] 外部 API 对接（供其他系统订阅 Agent 状态）
+- [ ] 多机器聚合监控
+
+## License
+
+MIT
