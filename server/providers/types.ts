@@ -45,4 +45,10 @@ export interface Provider {
   start(emit: EmitFn): void
   /** Stop monitoring, clean up resources */
   stop(): void
+  /**
+   * Report an external permission request for a session.
+   * Reserved for future OpenCode plugin hook (permission.ask).
+   * When called, forces the session into 'waiting' status.
+   */
+  reportPermission?(sessionId: string): void
 }

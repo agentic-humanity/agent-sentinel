@@ -161,6 +161,17 @@ export class OpenCodeProvider implements Provider {
     }
   }
 
+  /**
+   * External permission report (future: from OpenCode plugin hook).
+   * Forces a session into 'waiting' status until next poll clears it.
+   */
+  private permissionOverrides = new Set<string>()
+
+  reportPermission(sessionId: string): void {
+    this.permissionOverrides.add(sessionId)
+    // Will be picked up on next poll cycle
+  }
+
   /** Watch the SQLite WAL file for changes — triggers poll within 500ms of any DB write */
   private startWatcher(emit: EmitFn): void {
     const walPath = this.dbPath + '-wal'
@@ -285,11 +296,33 @@ export class OpenCodeProvider implements Provider {
       .filter(Boolean)
   }
 
+  /**
+   * Staleness thresholds: if a tool has been "running" longer than this,
+   * treat it as stale (OpenCode didn't update the status).
+   */
+  private isStaleRunning(tool: string, ageMs: number): boolean {
+    // `task` (subagent) can legitimately run for a long time
+    if (tool === 'task') return ageMs > 30 * 60_000 // 30 min
+    // Most tools finish in seconds; 2 min is generous
+    return ageMs > 2 * 60_000
+  }
+
   private inferStatusAndSteps(
     db: Database,
     session: SessionRow,
   ): { status: AgentStatus; currentStep: string; lastStep: string } {
+    const now = Date.now()
     const recentDone = this.getRecentCompleted(db, session.id)
+
+    // --- Rule 0: External permission override (from plugin hook) ---
+    if (this.permissionOverrides.has(session.id)) {
+      this.permissionOverrides.delete(session.id)
+      return {
+        status: 'waiting',
+        currentStep: 'Permission required',
+        lastStep: recentDone[0] ?? '',
+      }
+    }
 
     // --- Rule 1: "question" tool running = user must decide ---
     const questionTool = db.prepare(`
@@ -309,19 +342,20 @@ export class OpenCodeProvider implements Provider {
       }
     }
 
-    // --- Rule 2: Any tool still running = active ---
+    // --- Rule 2: Any tool genuinely running (not stale) = active ---
     const runningTool = db.prepare(`
       SELECT json_extract(data, '$.tool') as tool,
-             json_extract(data, '$.state.metadata.description') as description
+             json_extract(data, '$.state.metadata.description') as description,
+             time_updated
       FROM part
       WHERE session_id = ?
         AND json_extract(data, '$.type') = 'tool'
         AND json_extract(data, '$.state.status') = 'running'
       ORDER BY time_updated DESC
       LIMIT 1
-    `).get(session.id) as PartRow | undefined
+    `).get(session.id) as (PartRow & { time_updated: number }) | undefined
 
-    if (runningTool) {
+    if (runningTool && !this.isStaleRunning(runningTool.tool ?? '', now - runningTool.time_updated)) {
       return {
         status: 'active',
         currentStep: describeAction(runningTool.tool, null, runningTool.description),
@@ -329,38 +363,68 @@ export class OpenCodeProvider implements Provider {
       }
     }
 
-    // --- Rule 3: Producing text/reasoning/step-start recently = active ---
+    // --- Rule 3: Recent output = active ---
+    // Use the latest part's own timestamp, not session.time_updated
     const latestPart = db.prepare(`
-      SELECT json_extract(data, '$.type') as type
+      SELECT json_extract(data, '$.type') as type,
+             time_updated
       FROM part
       WHERE session_id = ?
       ORDER BY time_updated DESC
       LIMIT 1
-    `).get(session.id) as { type: string | null } | undefined
+    `).get(session.id) as { type: string | null; time_updated: number } | undefined
 
-    const age = Date.now() - session.time_updated
+    const partAge = latestPart ? now - latestPart.time_updated : Infinity
 
-    if (latestPart?.type === 'reasoning' && age < 30_000) {
+    if (latestPart?.type === 'reasoning' && partAge < 30_000) {
       return { status: 'active', currentStep: 'Thinking...', lastStep: recentDone[0] ?? '' }
     }
-    if (latestPart?.type === 'text' && age < 15_000) {
+    if (latestPart?.type === 'text' && partAge < 15_000) {
       return { status: 'active', currentStep: 'Writing response...', lastStep: recentDone[0] ?? '' }
     }
-    if (latestPart?.type === 'step-start' && age < 15_000) {
-      return { status: 'active', currentStep: 'Starting next step...', lastStep: recentDone[0] ?? '' }
+    if ((latestPart?.type === 'step-start' || latestPart?.type === 'patch') && partAge < 15_000) {
+      return { status: 'active', currentStep: 'Working...', lastStep: recentDone[0] ?? '' }
     }
 
     // --- Rule 4: User just sent message ---
     const latestMsg = db.prepare(`
-      SELECT json_extract(data, '$.role') as role
+      SELECT json_extract(data, '$.role') as role, time_created
       FROM message WHERE session_id = ? ORDER BY time_created DESC LIMIT 1
-    `).get(session.id) as MessageRow | undefined
+    `).get(session.id) as (MessageRow & { time_created: number }) | undefined
 
-    if (latestMsg?.role === 'user' && age < 30_000) {
+    const msgAge = latestMsg ? now - latestMsg.time_created : Infinity
+
+    if (latestMsg?.role === 'user' && msgAge < 30_000) {
       return { status: 'active', currentStep: 'Processing...', lastStep: recentDone[0] ?? '' }
     }
 
-    // --- Rule 5: Idle ---
+    // --- Rule 5: Permission heuristic ---
+    // If session was recently active (part updated in last 60s) but now has no
+    // running tool and latest message is assistant → might be waiting for permission.
+    // Detected by: session has a completed tool very recently (< 10s)
+    // but no new text/tool started after it.
+    if (latestPart && partAge < 10_000 && partAge > 2_000) {
+      // Agent just stopped producing output 2-10s ago — could be waiting for confirmation
+      const lastToolStatus = db.prepare(`
+        SELECT json_extract(data, '$.state.status') as status
+        FROM part
+        WHERE session_id = ?
+          AND json_extract(data, '$.type') = 'tool'
+        ORDER BY time_updated DESC
+        LIMIT 1
+      `).get(session.id) as { status: string | null } | undefined
+
+      if (lastToolStatus?.status === 'completed' || lastToolStatus?.status === 'error') {
+        // Tool just finished but agent isn't producing new output — possible permission wait
+        return {
+          status: 'waiting',
+          currentStep: 'May need your attention',
+          lastStep: recentDone[0] ?? '',
+        }
+      }
+    }
+
+    // --- Rule 6: Idle ---
     return {
       status: 'idle',
       currentStep: recentDone[0] ?? '',

@@ -3,8 +3,9 @@ import { cors } from 'hono/cors'
 import { streamSSE } from 'hono/streaming'
 import type { Store } from './store'
 import type { BrowserProvider, BrowserReport } from './providers/browser'
+import type { OpenCodeProvider } from './providers/opencode'
 
-export function createApi(store: Store, browserProvider: BrowserProvider): Hono {
+export function createApi(store: Store, browserProvider: BrowserProvider, openCodeProvider?: OpenCodeProvider): Hono {
   const app = new Hono()
 
   app.use('*', cors())
@@ -75,6 +76,16 @@ export function createApi(store: Store, browserProvider: BrowserProvider): Hono 
     if (isNaN(tabId)) return c.json({ error: 'invalid tabId' }, 400)
     browserProvider.removeTab(site, tabId)
     return c.json({ ok: true })
+  })
+
+  // Permission report (for future OpenCode plugin hook)
+  app.post('/api/permission/:sessionId', (c) => {
+    const sessionId = c.req.param('sessionId')
+    if (openCodeProvider?.reportPermission) {
+      openCodeProvider.reportPermission(sessionId)
+      return c.json({ ok: true })
+    }
+    return c.json({ error: 'opencode provider not available' }, 503)
   })
 
   // List registered providers (for extensibility visibility)

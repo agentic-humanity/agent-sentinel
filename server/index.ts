@@ -14,10 +14,11 @@ const PORT = parseInt(process.env.PORT ?? '8777', 10)
 const store = new Store()
 
 // --- Initialize providers ---
+const openCodeProvider = new OpenCodeProvider()
 const browserProvider = new BrowserProvider()
 
 const providers: Provider[] = [
-  new OpenCodeProvider(),
+  openCodeProvider,
   browserProvider,
 ]
 
@@ -28,7 +29,7 @@ for (const provider of providers) {
 }
 
 // --- Create Hono app with optional static file serving ---
-const app = createApi(store, browserProvider)
+const app = createApi(store, browserProvider, openCodeProvider)
 
 // Serve built frontend if available (web/dist/)
 const webDistDir = join(import.meta.dir, '..', 'web', 'dist')
