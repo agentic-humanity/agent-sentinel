@@ -37,46 +37,52 @@ const POLL_INTERVAL = 5_000
 /** How long a session stays visible after last update (30 min) */
 const VISIBILITY_WINDOW = 30 * 60 * 1000
 
-/** Provider-friendly names */
-const PROVIDER_LABELS: Record<string, string> = {
-  opencode: 'OpenCode Zen',
-  'openrouter': 'OpenRouter',
-  deepseek: 'DeepSeek',
-  'kimi-for-coding': 'Kimi',
-  'minimax-cn-coding-plan': 'MiniMax',
-  'volcengine-plan': 'Volcengine',
-  zai: 'Zai',
-}
+const MODELS_DEV_URL = 'https://models.dev/api.json'
 
-/** Human-friendly model names.
- *  Convention: keep exact version numbers — e.g. "claude-opus-4-6" → "Claude Opus 4.6"
+/**
+ * Fetches model display names + provider names from models.dev at startup.
+ * Falls back gracefully — if fetch fails, raw IDs are used as-is.
  */
-function formatModel(modelId: string): string {
-  const map: Record<string, string> = {
-    'claude-opus-4-6': 'Claude Opus 4.6',
-    'claude-sonnet-4-6': 'Claude Sonnet 4.6',
-    'claude-3-5-sonnet': 'Claude Sonnet 3.5',
-    'claude-3-5-haiku': 'Claude Haiku 3.5',
-    'gpt-5.4': 'GPT-5.4',
-    'gpt-5.4-pro': 'GPT-5.4 Pro',
-    'deepseek-chat': 'DeepSeek Chat',
-    'deepseek-reasoner': 'DeepSeek Reasoner',
-    'k2p5': 'Kimi K2P5',
-    'glm-5': 'GLM-5',
-    'doubao-seed-2.0-code': 'Doubao Seed 2.0 Code',
-    'doubao-seed-2.0-pro': 'Doubao Seed 2.0 Pro',
-    'doubao-seed-code': 'Doubao Seed Code',
-    'MiniMax-M2.5': 'MiniMax M2.5',
-    'MiniMax-M2.5-highspeed': 'MiniMax M2.5 HS',
-    'MiniMax-M2.7-highspeed': 'MiniMax M2.7 HS',
-    'mimo-v2-pro-free': 'MiMo V2 Pro',
-    'minimax-m2.5-free': 'MiniMax M2.5',
-    'nemotron-3-super-free': 'Nemotron 3 Super',
-    'qwen3.6-plus-free': 'Qwen 3.6 Plus',
-    'openai/gpt-5.4': 'GPT-5.4',
-    'xiaomi/mimo-v2-pro': 'MiMo V2 Pro',
+class ModelRegistry {
+  private modelNames = new Map<string, string>()
+  private providerNames = new Map<string, string>()
+  private loaded = false
+
+  async load(): Promise<void> {
+    try {
+      const res = await fetch(MODELS_DEV_URL, { signal: AbortSignal.timeout(10_000) })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const data = await res.json() as Record<string, {
+        id: string
+        name?: string
+        models?: Record<string, { id: string; name?: string }>
+      }>
+
+      for (const [provId, prov] of Object.entries(data)) {
+        if (prov.name) this.providerNames.set(provId, prov.name)
+        if (prov.models) {
+          for (const [modelId, model] of Object.entries(prov.models)) {
+            if (model.name) this.modelNames.set(modelId, model.name)
+          }
+        }
+      }
+
+      this.loaded = true
+      console.log(`[opencode] ModelRegistry loaded: ${this.modelNames.size} models, ${this.providerNames.size} providers`)
+    } catch (e) {
+      console.warn('[opencode] Failed to load models.dev, falling back to raw IDs:', e)
+    }
   }
-  return map[modelId] ?? modelId
+
+  formatModel(modelId: string): string {
+    return this.modelNames.get(modelId) ?? modelId
+  }
+
+  formatProvider(providerId: string): string {
+    // OpenCode's own provider is called "OpenCode Zen" in their UI
+    if (providerId === 'opencode') return 'OpenCode Zen'
+    return this.providerNames.get(providerId) ?? providerId
+  }
 }
 
 /** Describe what the agent is doing from tool name */
@@ -112,12 +118,15 @@ export class OpenCodeProvider implements Provider {
   private timer: ReturnType<typeof setInterval> | null = null
   private db: Database | null = null
   private dbPath: string
+  private registry = new ModelRegistry()
 
   constructor(dbPath?: string) {
     this.dbPath = dbPath ?? getDbPath()
   }
 
   start(emit: EmitFn): void {
+    // Load model registry in background, don't block polling
+    this.registry.load().then(() => this.poll(emit))
     this.poll(emit)
     this.timer = setInterval(() => this.poll(emit), POLL_INTERVAL)
   }
@@ -196,9 +205,9 @@ export class OpenCodeProvider implements Provider {
             slug: session.slug,
             parentId: session.parent_id,
             isSubagent: !!session.parent_id,
-            model: model ? formatModel(model) : undefined,
+            model: model ? this.registry.formatModel(model) : undefined,
             modelRaw: model,
-            providerLabel: provider ? (PROVIDER_LABELS[provider] ?? provider) : undefined,
+            providerLabel: provider ? this.registry.formatProvider(provider) : undefined,
             providerRaw: provider,
             projectName,
           },

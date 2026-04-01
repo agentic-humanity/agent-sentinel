@@ -1,10 +1,13 @@
 import { serve } from 'bun'
+import { existsSync } from 'fs'
+import { join } from 'path'
 import { Store } from './store'
 import { createApi } from './api'
 import { OpenCodeProvider } from './providers/opencode'
 import { BrowserProvider } from './providers/browser'
 import type { Provider } from './providers/types'
 
+const NAME = 'agent-sentinel'
 const PORT = parseInt(process.env.PORT ?? '8777', 10)
 
 // --- Initialize store ---
@@ -21,11 +24,21 @@ const providers: Provider[] = [
 // Start all providers
 for (const provider of providers) {
   provider.start((agents) => store.updateFromProvider(provider.name, agents))
-  console.log(`[carrick-watch] Provider "${provider.name}" started`)
+  console.log(`[${NAME}] Provider "${provider.name}" started`)
 }
 
-// --- Create Hono app ---
+// --- Create Hono app with optional static file serving ---
 const app = createApi(store, browserProvider)
+
+// Serve built frontend if available (web/dist/)
+const webDistDir = join(import.meta.dir, '..', 'web', 'dist')
+if (existsSync(webDistDir)) {
+  const { serveStatic } = await import('hono/bun')
+  app.use('/*', serveStatic({ root: webDistDir }))
+  // SPA fallback: serve index.html for non-API routes
+  app.get('*', serveStatic({ path: join(webDistDir, 'index.html') }))
+  console.log(`[${NAME}] Serving dashboard from web/dist/`)
+}
 
 // --- Start server ---
 const server = serve({
@@ -33,14 +46,11 @@ const server = serve({
   fetch: app.fetch,
 })
 
-console.log(`[carrick-watch] Server running at http://localhost:${PORT}`)
-console.log(`[carrick-watch] Dashboard: http://localhost:${PORT}`)
-console.log(`[carrick-watch] API: http://localhost:${PORT}/api/agents`)
-console.log(`[carrick-watch] SSE: http://localhost:${PORT}/api/events`)
+console.log(`[${NAME}] Running at http://localhost:${PORT}`)
 
 // Graceful shutdown
 process.on('SIGINT', () => {
-  console.log('\n[carrick-watch] Shutting down...')
+  console.log(`\n[${NAME}] Shutting down...`)
   for (const provider of providers) provider.stop()
   server.stop()
   process.exit(0)

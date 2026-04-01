@@ -6,8 +6,9 @@
   "scripts": {
     "dev": "bun run --hot server/index.ts",
     "dev:web": "vite --config web/vite.config.ts",
-    "build:web": "vite build --config web/vite.config.ts",
-    "start": "bun run server/index.ts"
+    "build": "vite build --config web/vite.config.ts",
+    "start": "vite build --config web/vite.config.ts && bun run server/index.ts",
+    "serve": "bun run server/index.ts"
   },
   "dependencies": {
     "hono": "^4.7.0"
