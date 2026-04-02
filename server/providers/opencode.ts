@@ -38,8 +38,11 @@ const POLL_INTERVAL = 5_000
 /** Debounce interval for fs.watch events (avoid hammering on rapid writes) */
 const WATCH_DEBOUNCE = 500
 
-/** How long a session stays visible after last update (30 min) */
-const VISIBILITY_WINDOW = 30 * 60 * 1000
+/** How long a session stays visible after last update (configurable via VISIBILITY_WINDOW_MINUTES env var, default 30 min) */
+const VISIBILITY_WINDOW_MINUTES = parseInt(process.env.VISIBILITY_WINDOW_MINUTES ?? '30', 10)
+const VISIBILITY_WINDOW = VISIBILITY_WINDOW_MINUTES * 60 * 1000
+
+
 
 const MODELS_DEV_URL = 'https://models.dev/api.json'
 
@@ -211,20 +214,21 @@ export class OpenCodeProvider implements Provider {
       return
     }
 
-    try {
-      const threshold = Date.now() - VISIBILITY_WINDOW
+     try {
+       const now = Date.now()
+       const threshold = now - VISIBILITY_WINDOW
 
-      // Show all non-archived sessions updated within the visibility window
-      const sessions = db.prepare(`
-        SELECT s.id, s.title, s.slug, s.project_id, s.parent_id,
-               s.time_created, s.time_updated,
-               p.worktree
-        FROM session s
-        LEFT JOIN project p ON s.project_id = p.id
-        WHERE s.time_archived IS NULL
-          AND s.time_updated > ?
-        ORDER BY s.time_updated DESC
-      `).all(threshold) as SessionRow[]
+       // Show all non-archived sessions updated within the visibility window
+       const sessions = db.prepare(`
+         SELECT s.id, s.title, s.slug, s.project_id, s.parent_id,
+                s.time_created, s.time_updated,
+                p.worktree
+         FROM session s
+         LEFT JOIN project p ON s.project_id = p.id
+         WHERE s.time_archived IS NULL
+           AND s.time_updated > ?
+         ORDER BY s.time_updated DESC
+       `).all(threshold) as SessionRow[]
 
       const agents: Agent[] = []
 
@@ -238,30 +242,37 @@ export class OpenCodeProvider implements Provider {
 
         const sessionTitle = session.title ?? session.slug ?? session.id.slice(0, 12)
 
-        agents.push({
-          id: `opencode:${session.id}`,
-          provider: this.name,
-          name: sessionTitle,
-          status: steps.status,
-          currentStep: steps.currentStep || undefined,
-          lastStep: steps.lastStep || undefined,
-          userMessage,
-          agentReply,
-          project: session.worktree ?? undefined,
-          meta: {
-            sessionId: session.id,
-            title: session.title,
-            slug: session.slug,
-            parentId: session.parent_id,
-            isSubagent: !!session.parent_id,
-            model: model ? this.registry.formatModel(model) : undefined,
-            modelRaw: model,
-            providerLabel: provider ? this.registry.formatProvider(provider) : undefined,
-            providerRaw: provider,
-            projectName,
-          },
-          updatedAt: session.time_updated,
-        })
+            const expiresAt = session.time_updated + VISIBILITY_WINDOW
+            const timeRemainingMs = Math.max(0, expiresAt - now)
+            const isExpiringSoon = timeRemainingMs < VISIBILITY_WINDOW * 0.2
+            
+            agents.push({
+              id: `opencode:${session.id}`,
+              provider: this.name,
+              name: sessionTitle,
+              status: steps.status,
+              currentStep: steps.currentStep || undefined,
+              lastStep: steps.lastStep || undefined,
+              userMessage,
+              agentReply,
+              project: session.worktree ?? undefined,
+              meta: {
+                sessionId: session.id,
+                title: session.title,
+                slug: session.slug,
+                parentId: session.parent_id,
+                isSubagent: !!session.parent_id,
+                model: model ? this.registry.formatModel(model) : undefined,
+                modelRaw: model,
+                providerLabel: provider ? this.registry.formatProvider(provider) : undefined,
+                providerRaw: provider,
+                projectName,
+                expiresAt,
+                timeRemainingMs,
+                isExpiringSoon,
+              },
+              updatedAt: session.time_updated,
+            })
       }
 
       // Filter: idle subagents are removed immediately (they finished their job)
@@ -398,33 +409,7 @@ export class OpenCodeProvider implements Provider {
       return { status: 'active', currentStep: 'Processing...', lastStep: recentDone[0] ?? '' }
     }
 
-    // --- Rule 5: Permission heuristic ---
-    // If session was recently active (part updated in last 60s) but now has no
-    // running tool and latest message is assistant → might be waiting for permission.
-    // Detected by: session has a completed tool very recently (< 10s)
-    // but no new text/tool started after it.
-    if (latestPart && partAge < 10_000 && partAge > 2_000) {
-      // Agent just stopped producing output 2-10s ago — could be waiting for confirmation
-      const lastToolStatus = db.prepare(`
-        SELECT json_extract(data, '$.state.status') as status
-        FROM part
-        WHERE session_id = ?
-          AND json_extract(data, '$.type') = 'tool'
-        ORDER BY time_updated DESC
-        LIMIT 1
-      `).get(session.id) as { status: string | null } | undefined
-
-      if (lastToolStatus?.status === 'completed' || lastToolStatus?.status === 'error') {
-        // Tool just finished but agent isn't producing new output — possible permission wait
-        return {
-          status: 'waiting',
-          currentStep: 'May need your attention',
-          lastStep: recentDone[0] ?? '',
-        }
-      }
-    }
-
-    // --- Rule 6: Idle ---
+    // --- Rule 5: Idle ---
     return {
       status: 'idle',
       currentStep: recentDone[0] ?? '',
