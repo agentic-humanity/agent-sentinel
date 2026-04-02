@@ -32,7 +32,6 @@ const statusStyles = computed((): StatusStyle => {
   return map[props.agent.status] ?? map.unknown
 })
 
-const cardStyle = computed(() => ({ backgroundColor: statusStyles.value.bg, borderColor: statusStyles.value.border }))
 const dotStyle = computed(() => ({ backgroundColor: statusStyles.value.dot }))
 const labelStyle = computed(() => ({ color: statusStyles.value.color }))
 
@@ -59,6 +58,29 @@ const hasBadges = computed(() =>
 
 const line1 = computed(() => props.agent.currentStep)
 const line2 = computed(() => props.agent.lastStep)
+
+const expirationProgress = computed(() => 
+  (props.agent.meta?.expirationProgress as number) ?? 0
+)
+
+const cardStyle = computed(() => {
+  const baseBg = statusStyles.value.bg
+  const progress = expirationProgress.value
+  const percentage = progress * 100
+  
+  // Pink gradient fills from left to right
+  // progress=0: no pink (all white/transparent showing baseBg)
+  // progress=1: full pink covering entire card
+  return {
+    background: `linear-gradient(to right, 
+      rgba(255, 192, 203, 0.37) 0%, 
+      rgba(255, 192, 203, 0.37) ${percentage}%, 
+      rgba(255, 255, 255, 0) ${percentage}%, 
+      rgba(255, 255, 255, 0) 100%),
+      ${baseBg}`,
+    borderColor: statusStyles.value.border
+  }
+})
 </script>
 
 <template>

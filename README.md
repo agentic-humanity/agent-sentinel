@@ -7,7 +7,8 @@
 ## 功能
 
 - **实时状态监控**：Active / Idle / Needs Attention 三态，颜色渐变切换
-- **OpenCode 深度集成**：读取本地 SQLite 数据库，检测所有活跃 Session
+- **会话过期可视化**：Idle 状态卡片从左到右填充粉红渐变（37%透明度），15分钟后完全填满，直观显示会话新鲜度
+- **OpenCode 深度集成**：读取本地 SQLite 数据库，检测所有活跃 Session，15分钟无更新自动隐藏
 - **任务步骤追踪**：2 行步骤展示（当前 + 上一个），完成的任务自动打勾下移
 - **模型 & Provider 显示**：完整模型名（Claude Opus 4 等）+ API 提供商
 - **用户指令 / Agent 回复**：可选展示最后一条用户输入和 Agent 文字回复
@@ -15,6 +16,7 @@
 - **SSE 实时推送**：前端通过 Server-Sent Events 获取更新，秒级响应
 - **REST API**：所有数据通过 API 暴露，可供其他系统集成
 - **可扩展 Provider 架构**：实现 `Provider` 接口即可接入新数据源
+- **OpenSpec 工作流**：支持 `/opsx:propose`、`/opsx:apply`、`/opsx:archive` 规格驱动开发
 
 ## 技术栈
 
@@ -61,16 +63,20 @@ server/
   store.ts              # 内存状态聚合
   providers/
     types.ts            # Provider 接口定义
-    opencode.ts         # OpenCode Provider（读 SQLite）
+    opencode.ts         # OpenCode Provider（读 SQLite，15分钟超时）
     browser.ts          # Browser Provider（接收扩展 POST）
 web/
   src/
     App.vue             # 主页面 + Settings Popover
     components/
-      AgentCard.vue     # Agent 状态卡片
+      AgentCard.vue     # Agent 状态卡片（含过期渐变效果）
     composables/
       useAgents.ts      # SSE 订阅
       useNow.ts         # 实时时钟（秒级 tick）
+openspec/               # OpenSpec 规格驱动开发
+  changes/              # 变更提案目录
+  specs/                # 规格文档目录
+.opencode/              # OpenCode 技能与命令
 extension/              # 浏览器扩展（开发中）
 ```
 
@@ -102,7 +108,9 @@ interface Provider {
 ## Roadmap
 
 ### Phase 1 — CLI Agent（当前）
-- [x] OpenCode Provider（SQLite 轮询）
+- [x] OpenCode Provider（SQLite 轮询 + 15分钟超时）
+- [x] 会话过期可视化（粉红渐变填充）
+- [x] OpenSpec 集成（规格驱动开发）
 - [ ] Claude Code Provider
 - [ ] Codex CLI Provider
 

@@ -38,9 +38,8 @@ const POLL_INTERVAL = 5_000
 /** Debounce interval for fs.watch events (avoid hammering on rapid writes) */
 const WATCH_DEBOUNCE = 500
 
-/** How long a session stays visible after last update (configurable via VISIBILITY_WINDOW_MINUTES env var, default 30 min) */
-const VISIBILITY_WINDOW_MINUTES = parseInt(process.env.VISIBILITY_WINDOW_MINUTES ?? '30', 10)
-const VISIBILITY_WINDOW = VISIBILITY_WINDOW_MINUTES * 60 * 1000
+/** How long a session stays visible after last update (fixed 15 min) */
+const VISIBILITY_WINDOW = 15 * 60 * 1000
 
 
 
@@ -243,8 +242,9 @@ export class OpenCodeProvider implements Provider {
         const sessionTitle = session.title ?? session.slug ?? session.id.slice(0, 12)
 
             const expiresAt = session.time_updated + VISIBILITY_WINDOW
-            const timeRemainingMs = Math.max(0, expiresAt - now)
-            const isExpiringSoon = timeRemainingMs < VISIBILITY_WINDOW * 0.2
+            // Only count expiration progress when session is idle
+            const timeElapsed = steps.status === 'idle' ? (now - session.time_updated) : 0
+            const expirationProgress = Math.min(1, Math.max(0, timeElapsed / VISIBILITY_WINDOW))
             
             agents.push({
               id: `opencode:${session.id}`,
@@ -268,8 +268,7 @@ export class OpenCodeProvider implements Provider {
                 providerRaw: provider,
                 projectName,
                 expiresAt,
-                timeRemainingMs,
-                isExpiringSoon,
+                expirationProgress,
               },
               updatedAt: session.time_updated,
             })
