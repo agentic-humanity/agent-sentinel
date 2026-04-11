@@ -4,7 +4,6 @@
   "identifier": "com.agent-sentinel.desktop",
   "build": {
     "beforeDevCommand": "bun run --cwd ../.. dev-web",
-    "beforeBuildCommand": "bun ../../scripts/gen-icons.ts && bun run --cwd ../.. build",
     "devUrl": "http://localhost:5188/widget.html",
     "frontendDist": "../../web/dist"
   },

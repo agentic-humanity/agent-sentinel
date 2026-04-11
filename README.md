@@ -58,7 +58,7 @@ bun run dev-desktop
 bun run build-desktop
 ```
 
-**说明：** 桌面壳只包含前端；监控数据仍来自本机 `bun` 服务（默认 `http://localhost:8777`），请先启动 `bun run dev` 或 `bun run start`。
+**说明：** 桌面壳只包含前端；监控数据仍来自本机 `bun` 服务（默认 `http://localhost:8777`），请先启动 `bun run dev` 或 `bun run start`。打包请用 `bun run build-desktop`（会先 `gen-icons`、再 Vite `build`、再 `cargo tauri build`）；不要单独在 `src-tauri` 里跑 `cargo tauri build` 而跳过前端构建。
 
 ### 测试
 

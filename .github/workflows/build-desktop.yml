@@ -8,6 +8,7 @@ on:
       - 'web/**'
       - 'scripts/gen-icons.ts'
       - 'package.json'
+      - '.github/workflows/build-desktop.yml'
   pull_request:
     branches: [main]
     paths:
@@ -15,6 +16,7 @@ on:
       - 'web/**'
       - 'scripts/gen-icons.ts'
       - 'package.json'
+      - '.github/workflows/build-desktop.yml'
 
 env:
   CARGO_TERM_COLOR: always
@@ -37,6 +39,12 @@ jobs:
 
       - name: Install cargo-tauri
         run: cargo install tauri-cli --version "^2"
+
+      - name: Generate icons (skip if already in repo)
+        run: bun scripts/gen-icons.ts
+
+      - name: Build frontend (web/dist for Tauri)
+        run: bun run build
 
       - name: Build Tauri app
         working-directory: ./desktop/src-tauri
