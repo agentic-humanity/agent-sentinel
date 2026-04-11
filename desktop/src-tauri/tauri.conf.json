@@ -3,8 +3,8 @@
   "version": "0.1.0",
   "identifier": "com.agent-sentinel.desktop",
   "build": {
-    "beforeDevCommand": "cd ../.. && bun run dev-web",
-    "beforeBuildCommand": "cd ../.. && bun scripts/gen-icons.ts && bun run build",
+    "beforeDevCommand": "bun run --cwd ../.. dev-web",
+    "beforeBuildCommand": "bun ../../scripts/gen-icons.ts && bun run --cwd ../.. build",
     "devUrl": "http://localhost:5188/widget.html",
     "frontendDist": "../../web/dist"
   },
