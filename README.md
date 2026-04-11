@@ -41,6 +41,29 @@ bun run dev:web
 
 # 打开浏览器
 # http://localhost:5188
+# 悬浮控件（同源开发）: http://localhost:5188/widget.html
+```
+
+复制 `.env.example` 为 `.env` 可改 `PORT`；前端构建会读该端口并同步 Vite 代理与 Tauri 内嵌的 `VITE_SERVER_PORT`。若 API 不在本机默认地址，可设置 `VITE_API_BASE`。
+
+### 桌面控件（Tauri）
+
+需本机已安装 Rust。先启动后端 `bun run dev`，再：
+
+```bash
+# 自动拉起 Vite（5188）+ 控件窗口
+bun run dev:desktop
+
+# 一键：生成图标（如需）+ 构建前端 + 打 Windows 包（在 Windows 上执行）
+bun run build:desktop
+```
+
+**说明：** 桌面壳只包含前端；监控数据仍来自本机 `bun` 服务（默认 `http://localhost:8777`），请先启动 `bun run dev` 或 `bun run start`。
+
+### 测试
+
+```bash
+bun test server
 ```
 
 ## API
@@ -60,24 +83,30 @@ GET  /api/health          # 健康检查
 server/
   index.ts              # Bun + Hono 入口
   api.ts                # REST + SSE 路由
+  api.test.ts           # API 集成测试（bun test）
   store.ts              # 内存状态聚合
   providers/
     types.ts            # Provider 接口定义
     opencode.ts         # OpenCode Provider（读 SQLite，15分钟超时）
     browser.ts          # Browser Provider（接收扩展 POST）
 web/
+  index.html            # 仪表盘入口
+  widget.html           # 桌面/悬浮窗入口
   src/
     App.vue             # 主页面 + Settings Popover
+    views/Widget.vue    # 紧凑控件视图
     components/
       AgentCard.vue     # Agent 状态卡片（含过期渐变效果）
     composables/
-      useAgents.ts      # SSE 订阅
+      useAgents.ts      # SSE 订阅（浏览器相对路径 / Tauri 指向后端端口）
       useNow.ts         # 实时时钟（秒级 tick）
+desktop/
+  src-tauri/            # Tauri v2 窗口壳（无边框、置顶）
+scripts/
+  gen-icons.ts          # 首次生成 src-tauri/icons（已有则跳过）
+  start-widget.ps1      # 仅浏览器打开托管后的 /widget.html
 openspec/               # OpenSpec 规格驱动开发
-  changes/              # 变更提案目录
-  specs/                # 规格文档目录
 .opencode/              # OpenCode 技能与命令
-extension/              # 浏览器扩展（开发中）
 ```
 
 ## 扩展 Provider

@@ -6,14 +6,20 @@
   "scripts": {
     "dev": "bun run --hot server/index.ts",
     "dev:web": "vite --config web/vite.config.ts",
+    "dev:desktop": "cd desktop/src-tauri && cargo tauri dev",
     "build": "vite build --config web/vite.config.ts",
+    "gen:icons": "bun run scripts/gen-icons.ts",
+    "build:desktop": "cd desktop/src-tauri && cargo tauri build",
     "start": "vite build --config web/vite.config.ts && bun run server/index.ts",
-    "serve": "bun run server/index.ts"
+    "serve": "bun run server/index.ts",
+    "test": "bun test server"
   },
   "dependencies": {
+    "@tauri-apps/api": "^2",
     "hono": "^4.7.0"
   },
   "devDependencies": {
+    "@tauri-apps/cli": "^2",
     "@types/bun": "^1.2.0",
     "@vitejs/plugin-vue": "^5.2.0",
     "tailwindcss": "^4.0.0",

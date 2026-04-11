@@ -9,6 +9,7 @@ import type { Provider } from './providers/types'
 
 const NAME = 'agent-sentinel'
 const PORT = parseInt(process.env.PORT ?? '8777', 10)
+const HOST = process.env.HOST ?? '0.0.0.0'
 
 // --- Initialize store ---
 const store = new Store()
@@ -38,12 +39,13 @@ if (existsSync(webDistDir)) {
   app.use('/*', serveStatic({ root: webDistDir }))
   // SPA fallback: serve index.html for non-API routes
   app.get('*', serveStatic({ path: join(webDistDir, 'index.html') }))
-  console.log(`[${NAME}] Serving dashboard from web/dist/`)
+  console.log(`[${NAME}] Serving frontend from web/dist/ (dashboard + widget)`)
 }
 
 // --- Start server ---
 const server = serve({
   port: PORT,
+  hostname: HOST,
   fetch: app.fetch,
 })
 

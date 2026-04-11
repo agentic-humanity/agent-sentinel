@@ -1,0 +1,67 @@
+name: Build Agent Sentinel Desktop
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - 'desktop/**'
+      - 'web/**'
+      - 'scripts/gen-icons.ts'
+      - 'package.json'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'desktop/**'
+      - 'web/**'
+      - 'scripts/gen-icons.ts'
+      - 'package.json'
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Install cargo-tauri
+        run: cargo install tauri-cli --version "^2"
+
+      - name: Build Tauri app
+        working-directory: ./desktop/src-tauri
+        run: cargo tauri build
+
+      - name: Upload artifact (Executable)
+        uses: actions/upload-artifact@v4
+        with:
+          name: agent-sentinel-desktop-exe
+          path: desktop/src-tauri/target/release/agent-sentinel-desktop.exe
+
+      - name: Upload artifact (Installer)
+        uses: actions/upload-artifact@v4
+        with:
+          name: agent-sentinel-desktop-installer
+          path: desktop/src-tauri/target/release/bundle/msi/*.msi
+
+      - name: Create Release
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            desktop/src-tauri/target/release/agent-sentinel-desktop.exe
+            desktop/src-tauri/target/release/bundle/msi/*.msi
+          draft: true
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

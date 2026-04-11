@@ -4,7 +4,7 @@ import { useAgents } from './composables/useAgents'
 import { useNow } from './composables/useNow'
 import AgentCard from './components/AgentCard.vue'
 
-const { agents, connected } = useAgents()
+const { agents } = useAgents()
 const now = useNow(1000)
 const settingsOpen = ref(false)
 
@@ -15,12 +15,16 @@ const display = reactive({
   userMsg: false,
   agentReply: false,
   subagent: false,
+  platform: false,
+  progressBar: true,
 })
 
 const toggles: { key: keyof typeof display; label: string }[] = [
   { key: 'model',      label: 'Model' },
   { key: 'provider',   label: 'Provider' },
   { key: 'folder',     label: 'Folder' },
+  { key: 'platform',   label: 'Platform' },
+  { key: 'progressBar', label: 'Progress' },
   { key: 'userMsg',    label: 'User Input' },
   { key: 'agentReply', label: 'Reply' },
   { key: 'subagent',   label: 'Sub-agents' },
@@ -81,15 +85,12 @@ const totalCount = computed(() => filteredAgents.value.length)
           <h1 class="text-base font-semibold text-gray-900">Carrick Sentinel</h1>
         </div>
         <div class="flex items-center gap-4">
-          <span class="text-xs text-gray-500">
-            <span class="font-medium text-gray-700">{{ activeCount }}</span> active
-            /
-            <span class="font-medium text-gray-700">{{ totalCount }}</span> total
+          <span class="text-xs">
+            <span :class="activeCount > 0 ? 'font-semibold text-[#39C5BB] text-base' : 'font-medium text-gray-500'">{{ activeCount }}</span>
+            <span class="text-gray-400"> active · </span>
+            <span class="font-medium text-gray-500">{{ totalCount }}</span>
+            <span class="text-gray-400"> total</span>
           </span>
-          <div class="flex items-center gap-1.5">
-            <div :class="['w-1.5 h-1.5 rounded-full', connected ? 'bg-emerald-500' : 'bg-red-400']" />
-            <span class="text-[10px] text-gray-400">{{ connected ? 'Live' : 'Reconnecting...' }}</span>
-          </div>
 
           <!-- Settings toggle -->
           <div class="relative">

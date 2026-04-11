@@ -8,6 +8,17 @@ function getDbPath(): string {
   return join(homedir(), '.local', 'share', 'opencode', 'opencode.db')
 }
 
+function detectPlatform(): string {
+  if (process.env.WSL_DISTRO_NAME) return 'WSL2'
+  if (existsSync('/proc/sys/fs/binfmt_misc/WSL')) return 'WSL2'
+  switch (process.platform) {
+    case 'win32': return 'Windows'
+    case 'darwin': return 'macOS'
+    case 'linux': return 'Linux'
+    default: return process.platform
+  }
+}
+
 interface SessionRow {
   id: string
   title: string | null
@@ -39,7 +50,7 @@ const POLL_INTERVAL = 5_000
 const WATCH_DEBOUNCE = 500
 
 /** How long a session stays visible after last update (fixed 15 min) */
-const VISIBILITY_WINDOW = 15 * 60 * 1000
+const VISIBILITY_WINDOW = 10 * 60 * 1000
 
 
 
@@ -216,6 +227,7 @@ export class OpenCodeProvider implements Provider {
      try {
        const now = Date.now()
        const threshold = now - VISIBILITY_WINDOW
+       const platform = detectPlatform()
 
        // Show all non-archived sessions updated within the visibility window
        const sessions = db.prepare(`
@@ -267,8 +279,10 @@ export class OpenCodeProvider implements Provider {
                 providerLabel: provider ? this.registry.formatProvider(provider) : undefined,
                 providerRaw: provider,
                 projectName,
+                platform,
                 expiresAt,
                 expirationProgress,
+                dying: expirationProgress > 0.9,
               },
               updatedAt: session.time_updated,
             })

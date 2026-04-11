@@ -8,6 +8,8 @@ export interface DisplayFlags {
   provider: boolean
   userMsg: boolean
   agentReply: boolean
+  platform: boolean
+  progressBar: boolean
 }
 
 const props = defineProps<{
@@ -46,8 +48,10 @@ const timeAgo = computed(() => {
 const model = computed(() => props.agent.meta?.model as string | undefined)
 const providerLabel = computed(() => props.agent.meta?.providerLabel as string | undefined)
 const projectName = computed(() => props.agent.meta?.projectName as string | undefined)
+const platform = computed(() => props.agent.meta?.platform as string | undefined)
 const isSubagent = computed(() => !!props.agent.meta?.isSubagent)
 const isBusy = computed(() => props.agent.status === 'active' || props.agent.status === 'waiting')
+const isDying = computed(() => (props.agent.meta?.dying as boolean) ?? false)
 
 const hasBadges = computed(() =>
   (isSubagent.value)
@@ -65,12 +69,12 @@ const expirationProgress = computed(() =>
 
 const cardStyle = computed(() => {
   const baseBg = statusStyles.value.bg
+  if (!props.display.progressBar) {
+    return { backgroundColor: baseBg, borderColor: statusStyles.value.border }
+  }
   const progress = expirationProgress.value
   const percentage = progress * 100
   
-  // Pink gradient fills from left to right
-  // progress=0: no pink (all white/transparent showing baseBg)
-  // progress=1: full pink covering entire card
   return {
     background: `linear-gradient(to right, 
       rgba(255, 192, 203, 0.37) 0%, 
@@ -86,7 +90,7 @@ const cardStyle = computed(() => {
 <template>
   <div
     :style="cardStyle"
-    :class="['agent-card border rounded-lg px-4 py-3', isSubagent ? 'ml-6 border-dashed' : '']"
+    :class="['agent-card border rounded-lg px-4 py-3 transition-opacity duration-1000', isSubagent ? 'ml-6 border-dashed' : '', isDying ? 'opacity-50' : '']"
   >
     <!-- Row 1: Dot + Title + Badges + Status -->
     <div class="flex items-start gap-3">
@@ -102,6 +106,7 @@ const cardStyle = computed(() => {
           <span v-if="display.model && model" class="badge bg-sky-50 text-sky-700 border-sky-200">{{ model }}</span>
           <span v-if="display.provider && providerLabel" class="badge bg-violet-50 text-violet-600 border-violet-200">{{ providerLabel }}</span>
           <span v-if="display.folder && projectName" class="badge bg-gray-50 text-gray-500 border-gray-200">{{ projectName }}</span>
+          <span v-if="display.platform && platform" class="badge bg-orange-50 text-orange-700 border-orange-200">{{ platform }}</span>
         </div>
       </div>
 

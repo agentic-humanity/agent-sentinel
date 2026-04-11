@@ -1,5 +1,19 @@
 import { ref, onMounted, onUnmounted } from 'vue'
 
+const TAURI = !!(window as any).__TAURI_INTERNALS__
+
+function resolveApiBase(): string {
+  const explicit = import.meta.env.VITE_API_BASE?.trim()
+  if (explicit) return explicit.replace(/\/$/, '')
+  if (TAURI) {
+    const port = import.meta.env.VITE_SERVER_PORT || '8777'
+    return `http://localhost:${port}`
+  }
+  return ''
+}
+
+const API_BASE = resolveApiBase()
+
 export interface Agent {
   id: string
   provider: string
@@ -24,7 +38,7 @@ export function useAgents() {
     if (eventSource) {
       eventSource.close()
     }
-    eventSource = new EventSource('/api/events')
+    eventSource = new EventSource(`${API_BASE}/api/events`)
 
     eventSource.onopen = () => {
       connected.value = true
