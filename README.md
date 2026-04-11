@@ -37,7 +37,7 @@ bun install
 bun run dev &
 
 # 启动 Vue Dashboard（端口 5188，代理 API 到 8777）
-bun run dev:web
+bun run dev-web
 
 # 打开浏览器
 # http://localhost:5188
@@ -52,10 +52,10 @@ bun run dev:web
 
 ```bash
 # 自动拉起 Vite（5188）+ 控件窗口
-bun run dev:desktop
+bun run dev-desktop
 
 # 一键：生成图标（如需）+ 构建前端 + 打 Windows 包（在 Windows 上执行）
-bun run build:desktop
+bun run build-desktop
 ```
 
 **说明：** 桌面壳只包含前端；监控数据仍来自本机 `bun` 服务（默认 `http://localhost:8777`），请先启动 `bun run dev` 或 `bun run start`。
